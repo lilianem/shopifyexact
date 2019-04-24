@@ -49,7 +49,7 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        Collection::macro('simple_paginate', function (int $perPage = 15, string $pageName = 'page', int $page = null, array $options = []): Paginator {
+        Collection::macro('simple_paginate', function (int $perPage = 15, string $pageName = 'page', int $page = null, int $total = null, array $options = []): Paginator {
             $page = $page ?: Paginator::resolveCurrentPage($pageName);
     
             $results = $this->slice(($page - 1) * $perPage)->take($perPage + 1);

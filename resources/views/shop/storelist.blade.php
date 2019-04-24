@@ -70,24 +70,31 @@
             <div class="card">
                 <div class="card-header">Dashboard</div>
                 <table class="table mb-0">
-                    <tbody>
-                        @if (!empty($stores))                        
-                            @foreach($stores as $store)
-                                <tr>
-                                    <td>{{ $store->name }}</td>
-                                    <td>{{ $store->domain }}</td>
-                                    <td><a href="shop/listwebhooksregisteredshopify/store/{{ $store->id }}">View Registered Webhooks</a></td>
-                                </tr>
-                            @endforeach                                                
-                    </tbody>                                
-                </table> 
-                
-                        @else
-                            <p>No Stores Available</p>
-                            <a href="{{ URL::to('/login/shopify/ind') }}"><button type="button" class="btn btn-primary btn-sm">Back</button></a>                            
-                        @endif
+                    @if (!empty($storeTestEmpty))
+                        <thead>
+                            <tr>
+                                <th>Store Name</th>
+                                <th>Store Domain</th>
+                                <th>Action</th>                                
+                            </tr>
+                        </thead>
+                        @foreach($stores as $store)
+                        <tbody>                                           
+                            <tr>
+                                <td>{{ $store->name }}</td>
+                                <td>{{ $store->domain }}</td>
+                                <td><a href="shop/listwebhooksregisteredshopify/store/{{ $store->id }}">View Registered Webhooks</a></td>
+                            </tr>
+                        </tbody>
+                        @endforeach
+                    @else
+                        <p>No Stores Available</p>
+                                                    
+                    @endif                                                                                                    
+                </table>            
             </div>
             {{ $stores->links() }}
+            <a href="{{ URL::to('/login/shopify/ind') }}"><button type="button" class="btn btn-primary btn-sm">Back</button></a>
             <a href="{{ URL::to('shop/create/webhooksshopify') }}"><button type="button" class="btn btn-primary btn-sm">Create Webhooks Shopify</button></a>
             <a href="{{ URL::to('shop/delete/webhooksshopify') }}"><button type="button" class="btn btn-primary btn-sm">Delete Registered Webhooks Shopify</button></a>            
             <a href="{{ URL::to('/skus') }}"><button type="button" class="btn btn-primary btn-sm">Skus List</button></a>

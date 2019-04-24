@@ -69,7 +69,7 @@
       <div class="table-responsive">      
         <table class="table table-striped">
           <thead>
-            @if (!empty($skus))                        
+            @if (!empty($skuTestEmpty))                        
               <tr>
                 <th>Sku Id</th>
                 <th>Sku #</th>

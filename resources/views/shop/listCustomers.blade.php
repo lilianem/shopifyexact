@@ -69,7 +69,7 @@
       <div class="table-responsive">      
         <table class="table table-striped">
           <thead>
-            @if (!empty($customersCollect))                        
+            @if (!empty($customers))                        
               <tr>
                 <th>Customer Id</th>
                 <th>First Name</th>
@@ -81,7 +81,7 @@
                 <th>Action</th>              
               </tr>
           </thead>          
-          @foreach($customersCollect as $customer)                            
+              @foreach($customersCollect as $customer)                            
                 <tbody>
                   <tr>
                     <td>{{$customer['id']}}</td>                                                      
@@ -99,7 +99,7 @@
                     @endif                                                             
                   </tr>
                 </tbody>              
-              @endforeach
+              @endforeach              
             @else
               <p>No Customer Available</p>
             @endif
@@ -107,7 +107,7 @@
       </div>
     </div>
   </div>
-  {{ $customersCollect->link_function() }}
+  {{ $customersCollect->links() }}  
   <a href="{{ URL::to('/storelist') }}"><button type="button" class="btn btn-primary btn-sm">Stores List</button></a>
   <a href="{{ URL::to('/orders/sync') }}"><button type="button" class="btn btn-primary btn-sm">Sync Shopify->Exact Orders and Customers</button></a>
   <a href="{{ URL::to('/customers/sync') }}"><button type="button" class="btn btn-primary btn-sm">Sync Shopify->Exact Customers</button></a>    

@@ -28,7 +28,7 @@ class LoginShopifyController extends Controller
     }
 
     /**
-    * Redirect the user to the GitHub authentication page.
+    * Redirect the user to the Shopify authentication page.
     *
     * @return \Illuminate\Http\Response
     */
@@ -50,7 +50,7 @@ class LoginShopifyController extends Controller
     }
 
     /**
-     * Obtain the user information from GitHub.
+     * Obtain the user information
      *
      * @return \Illuminate\Http\Response
      */

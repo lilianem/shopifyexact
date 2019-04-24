@@ -69,7 +69,7 @@
       <div class="table-responsive">      
         <table class="table table-striped">
           <thead>
-            @if (!empty($ordersCollect))                        
+            @if (!empty($orders))                        
               <tr>
                 <th>Order Id</th>
                 <th>Order #</th>
@@ -115,7 +115,7 @@
       </div>
     </div>
   </div>
-  {{ $ordersCollect->link_function() }}
+  {{ $ordersCollect->links() }}
   <a href="{{ URL::to('/storelist') }}"><button type="button" class="btn btn-primary btn-sm">Stores List</button></a>
   <a href="{{ URL::to('/orders/sync') }}"><button type="button" class="btn btn-primary btn-sm">Sync Orders and Customers</button></a>    
 </div>

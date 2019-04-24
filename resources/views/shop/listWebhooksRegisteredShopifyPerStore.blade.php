@@ -73,7 +73,7 @@
                 </div>
                 <div class="card-body">                   
                     <table class="table mb-0">
-                        @if (!empty($webhooksCollect))
+                        @if (!empty($webhooks))
                             <thead>                            
                                 <tr>                        
                                     <th>Webhook Id</th>
@@ -87,14 +87,15 @@
                                         <td>{{ $webhook['topic'] }}</td>                                    
                                     </tr>
                                 @endforeach
-                            </tbody>                                               
-                    </table>
-                </div>                
+                            </tbody>
                         @else
                             <p>No Wehooks Available</p>                                                        
-                        @endif
+                        @endif                                               
+                    </table>
+                </div>                
+                        
             </div>
-            {{ $webhooksCollect->link_function() }}
+            {{ $webhooksCollect->links() }}
             <a href="{{ URL::to('/storelist') }}"><button type="button" class='btn btn-primary btn-sm'>Back</button></a>          
             <a href="{{ URL::to('shop/create/webhooksshopify') }}"><button type="button" class="btn btn-primary btn-sm">Create Webhooks Shopify</button></a>
             <a href="{{ URL::to('shop/delete/webhooksshopify') }}"><button type="button" class="btn btn-primary btn-sm">Delete Registered Webhooks Shopify</button></a>            

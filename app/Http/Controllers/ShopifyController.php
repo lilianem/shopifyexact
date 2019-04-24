@@ -23,13 +23,15 @@ use PHPShopify\ShopifySDK;
 use PHPShopify\AuthHelper;
 use App\Models\UserProvider;
 use App\Models\StoreProvider;
+use Carbon\Carbon;
 
 class ShopifyController extends Controller
 {
     public function storelist()
     {   
-        $stores = Store::where('company_id', auth()->user()->company_id)->simplePaginate(15);
-        return view('shop.storelist')->with('stores', $stores);
+        $stores = Store::where('company_id', auth()->user()->company_id)->simplePaginate(5);
+        $storeTestEmpty = Store::where('company_id', auth()->user()->company_id)->first(); 
+        return view('shop.storelist')->with('stores', $stores)->with('storeTestEmpty', $storeTestEmpty);
     }    
 
     public function showSku($id)
@@ -41,15 +43,17 @@ class ShopifyController extends Controller
     public function listSkus()
     {        
         $skus = Sku::where('company_id', auth()->user()->company_id)
-            ->with(['company', 'designation', 'tag', 'totsku', 'products', 'country_price.country', 'country_price.price'])->simplePaginate(15);        
-        return view('shop.listSkus')->with('skus', $skus);                    
+            ->with(['company', 'designation', 'tag', 'totsku', 'products', 'country_price.country', 'country_price.price'])->simplePaginate(5);
+        $skuTestEmpty = Sku::where('company_id', auth()->user()->company_id)->first();            
+        return view('shop.listSkus')->with('skus', $skus)->with('skuTestEmpty', $skuTestEmpty);                    
     }
 
     public function listProducts($id)
     {        
         $sku = Sku::with(['designation'])->Find($id);
-        $products = Product::where('sku_id', $id)->orderBy('provproductid', 'asc')->with(['store'])->simplePaginate(15);     
-        return view('shop.listProducts')->with('sku', $sku)->with('products', $products);        
+        $products = Product::where('sku_id', $id)->orderBy('provproductid', 'asc')->with(['store'])->simplePaginate(5);
+        $productTestEmpty = Product::where('sku_id', $id)->first();        
+        return view('shop.listProducts')->with('sku', $sku)->with('products', $products)->with('productTestEmpty', $productTestEmpty);       
     }
 
     public function listCustomers()
@@ -64,11 +68,19 @@ class ShopifyController extends Controller
             );           
             $shopify = new \PHPShopify\ShopifySDK($config);
             $customers0 = $shopify->Customer->get();
-            $customers0[0]['store'] = $store->name;
-            $customers = array_merge($customers, $customers0);
-            $customersCollect = collect($customers);                                                                     
-        }    
-        return view('shop.listCustomers')->with('customersCollect', $customersCollect);       
+            if (!empty($customers0))
+            {
+                $customers0[0]['store'] = $store->name;                
+                $customers = array_merge($customers, $customers0);
+                $customersCollect = collect($customers)->simple_paginate(5);
+            }
+                                                                                 
+        }
+        if (empty($customersCollect))
+        {                
+                $customersCollect = collect([])->simple_paginate(5);
+        }        
+        return view('shop.listCustomers')->with('customersCollect', $customersCollect)->with('customers', $customers);       
     }
 
     public function showCustomer($storeName, $id)
@@ -108,71 +120,64 @@ class ShopifyController extends Controller
         $webhooks = [];
         foreach(auth()->user()->company->stores as $store)
         {   
-            $webhookOK = 'OK';         
-            foreach($store->providers as $provider)
+            $webhookOK = 'OK';
+            $provider = StoreProvider::where('store_id', $store->id)->first();         
+            $config = array(
+                'ShopUrl' => $store->domain,
+                'AccessToken' => $provider->provider_token,
+            );          
+            $shopify = new \PHPShopify\ShopifySDK($config);                
+            $params = array(
+                "topic" => $request->input('webhookShopify'),
+                "address" => env('APP_URL') . 'webhook/' . str_replace('/', '', $request->input('webhookShopify')),
+                "format" => "json"
+            );             
+            $webhook0 = $shopify->Webhook->get();
+            foreach ($webhook0 as $webhook1)
             {
-                $config = array(
-                    'ShopUrl' => $store->domain,
-                    'AccessToken' => $provider->provider_token,
-                );          
-                $shopify = new \PHPShopify\ShopifySDK($config);                
-                $params = array(
-                    "topic" => $request->input('webhookShopify'),
-                    "address" => env('APP_URL') . 'webhook/' . str_replace('/', '', $request->input('webhookShopify')),
-                    "format" => "json"
-                );             
-                $webhook0 = $shopify->Webhook->get();
-                foreach ($webhook0 as $webhook1)
-                {
-                    if ($webhook1['topic'] == $request->input('webhookShopify'))
-                    {       
+                if ($webhook1['topic'] == $request->input('webhookShopify'))
+                    {                  
                         $webhookOK = 'NOK';
+                        header("HTTP/1.1 401 OK");
+                        return redirect()->back()->with('error', 'Webhooks Shopify Already Exist!');
                     }
+            }
+            if ($webhookOK == 'OK')
+            {
+                $webhook2 = $shopify->Webhook->post($params);
+                header("HTTP/1.1 200 OK");         
+                if (NULL !== $provider->webhookShopify_id and $provider->webhookShopify_id !== 0)
+                {
+                    $storeProvider = new StoreProvider;
+                    $storeProvider->store_id = $store->id;
+                    $storeProvider->provider = $provider->provider;
+                    $storeProvider->provider_store_id = $provider->provider_store_id;
+                    $storeProvider->provider_token = $provider->provider_token;
+                    $storeProvider->webhookShopify_id = $webhook2['id'];
+                    $storeProvider->save();
+                } else if (NULL == $provider->webhookShopify_id or $provider->webhookShopify_id == 0)
+                {
+                    $provider->webhookShopify_id = $webhook2['id'];
+                    $provider->update();
                 }
-                if ($webhookOK == 'NOK')
-                {
-                    header("HTTP/1.1 401 OK");
-                    return redirect()->back()->with('error', 'Webhooks Shopify Already Exist!');
-                } else if ($webhookOK == 'OK')
-                {
-                    $webhook2 = $shopify->Webhook->post($params);
-                    header("HTTP/1.1 200 OK");         
-                    if (NULL !== $provider->webhookShopify_id and $provider->webhookShopify_id !== 0)
-                    {
-                        $storeProvider = new StoreProvider;
-                        $storeProvider->store_id = $store->id;
-                        $storeProvider->provider = $provider->provider;
-                        $storeProvider->provider_store_id = $provider->provider_store_id;
-                        $storeProvider->provider_token = $provider->provider_token;
-                        $storeProvider->webhookShopify_id = $webhook2['id'];
-                        $storeProvider->save();
-                    } else if (NULL == $provider->webhookShopify_id or $provider->webhookShopify_id == 0)
-                    {
-                        $provider->webhookShopify_id = $webhook2['id'];
-                        $provider->update();
-                    }
-                }   
-            }                 
+            }     
         }
         return redirect()->back()->with('success', 'Webhooks Shopify Registered!');       
     }
 
     public function deleteWebhooksShopifyForm()
-    {
-        $stores = Store::where('company_id', auth()->user()->company_id)->simplePaginate(5);
+    {        
         $deleteWebhooks = [];
         foreach(auth()->user()->company->stores as $store)
-        {            
-            foreach($store->providers as $provider)
-            {
-                $config = array(
-                    'ShopUrl' => $store->domain,
-                    'AccessToken' => $provider->provider_token,
-                );          
-                $shopify = new \PHPShopify\ShopifySDK($config);                
-                $deleteWebhook0 = $shopify->Webhook->get();
-                $deleteWebhooks = array_merge($deleteWebhooks, $deleteWebhook0);       
-            }
+        {   
+            $storeProvider = StoreProvider::where('store_id', $store->id)->first();         
+            $config = array(
+                'ShopUrl' => $store->domain,
+                'AccessToken' => $storeProvider->provider_token,
+            );          
+            $shopify = new \PHPShopify\ShopifySDK($config);                
+            $deleteWebhook0 = $shopify->Webhook->get();
+            $deleteWebhooks = array_merge($deleteWebhooks, $deleteWebhook0);      
         }
         return view('shop.deleteWebhooksShopifyForm')->with('deleteWebhooks', $deleteWebhooks);               
     }
@@ -184,51 +189,63 @@ class ShopifyController extends Controller
         ]);
 
         $webhooks = [];
+        $deletedOK = "NOK";
         foreach(auth()->user()->company->stores as $store)
-        {            
-            foreach($store->providers as $provider)
+        {   
+            $storeProvider = StoreProvider::where('store_id', $store->id)->first();         
+            $config = array(
+                'ShopUrl' => $store->domain,
+                'AccessToken' => $storeProvider->provider_token,
+            );          
+            $shopify = new \PHPShopify\ShopifySDK($config);         
+            $webhook0 = $shopify->Webhook->get();
+            foreach ($webhook0 as $webhook1)
             {
-                $config = array(
-                    'ShopUrl' => $store->domain,
-                    'AccessToken' => $provider->provider_token,
-                );          
-                $shopify = new \PHPShopify\ShopifySDK($config);         
-
-                $webhook0 = $shopify->Webhook->get();
-                foreach ($webhook0 as $webhook1)
+                if ($webhook1['topic'] == $request->input('webhookShopify'))
+                {                            
+                    $storeProviderDB = StoreProvider::where('webhookShopify_id',$webhook1['id'])->first();
+                    if (NULL !== $storeProviderDB)
+                    {
+                        $storeProviderDB->delete();
+                    }                        
+                    $shopify->Webhook($webhook1['id'])->delete();
+                    header("HTTP/1.1 200 OK");
+                    $deletedOK = "OK";
+                } else
                 {
-                    if ($webhook1['topic'] == $request->input('webhookShopify'))
-                    {                            
-                        $storeProviderDB = StoreProvider::where('webhookShopify_id',$webhook1['id'])->first();
-                        if (NULL !== $storeProviderDB)
-                        {
-                            $storeProviderDB->webhookShopify_id = 0; 
-                            $storeProviderDB->save();
-                        }                        
-                        $shopify->Webhook($webhook1['id'])->delete();
-                        header("HTTP/1.1 200 OK");
-                    }
-                }                         
-            }           
+                    $deletedOK = "NOK";
+                }
+            }                      
         }
-        return redirect()->back()->with('success', 'Webhooks Shopify Deleted!');       
+        if ($deletedOK = "OK")
+        {
+            return redirect()->back()->with('success', 'Webhook Shopify Deleted!');
+        } else 
+        {
+            return redirect()->back()->with('success', 'This Webhook Shopify does not exist. Nothing to delete!');
+        }               
     }
 
     public function listWebhooksRegisteredShopifyPerStore($id)
     {   
-        $store = Store::Find($id);    
-        foreach($store->providers as $provider)
-        {
-            $config = array(
-                'ShopUrl' => $store->domain,
-                'AccessToken' => $provider->provider_token,
-            );          
-            $shopify = new \PHPShopify\ShopifySDK($config);                
-            $webhooks = $shopify->Webhook->get();
-            header("HTTP/1.1 200 OK");
-            $webhooksCollect = collect($webhooks);              
-        }        
-        return view('shop.listWebhooksRegisteredShopifyPerStore')->with('store', $store)->with('webhooksCollect', $webhooksCollect);         
+        $store = Store::Find($id);
+        $storeProvider = StoreProvider::where('store_id', $store->id)->first();     
+        $config = array(
+            'ShopUrl' => $store->domain,
+            'AccessToken' => $storeProvider->provider_token,
+        );          
+        $shopify = new \PHPShopify\ShopifySDK($config);                
+        $webhooks = $shopify->Webhook->get();
+        header("HTTP/1.1 200 OK");           
+        if (!empty($webhooks))
+        {             
+            $webhooksCollect = collect($webhooks)->simple_paginate(5);
+        } else
+        {                
+            $webhooksCollect = collect([])->simple_paginate(5);
+        }       
+        return view('shop.listWebhooksRegisteredShopifyPerStore')
+            ->with('store', $store)->with('webhooksCollect', $webhooksCollect)->with('webhooks', $webhooks);         
     }
 
     public function listOrders()
@@ -243,10 +260,19 @@ class ShopifyController extends Controller
             );          
             $shopify = new \PHPShopify\ShopifySDK($config);                
             $orders0 = $shopify->Order->get();
-            $orders = array_merge($orders, $orders0);
-            $ordersCollect = collect($orders);                    
-        }        
-        return view('shop.listOrders')->with('ordersCollect', $ordersCollect);       
+            if (!empty($orders0))
+            {
+                $orders0[0]['store'] = $store->name;
+                $orders = array_merge($orders, $orders0);
+                $ordersCollect = collect($orders)->simple_paginate(5);
+            }
+                                                                                 
+        }
+        if (empty($ordersCollect))
+        {                
+            $ordersCollect = collect([])->simple_paginate(5);
+        }    
+        return view('shop.listOrders')->with('ordersCollect', $ordersCollect)->with('orders', $orders);       
     }
 
     public function showOrder($storeName, $id)
@@ -274,110 +300,127 @@ class ShopifyController extends Controller
                 'AccessToken' => $storeProvider->provider_token,
             );         
             $shopify = new \PHPShopify\ShopifySDK($config);
-            $orders0 = $shopify->Order->get();
+            $orders0 = $shopify->Order->get();            
             $orders = array_merge($orders, $orders0);
-
-            foreach($orders as $order)
+        }        
+        foreach($orders as $order)
+        {
+            // If authorization code is returned from Exact, save this to use for token request
+            if (isset($_GET['code']) && is_null(getValue('authorizationcode'))) {
+                setValue('authorizationcode', $_GET['code']);
+            }
+            // If we do not have a authorization code, authorize first to setup tokens
+            if (getValue('authorizationcode') === null) {
+                authorizer();
+            }     
+            // For Customer
+            $connection = connecter();
+            // $url = 'crm/Accounts';
+            $exactCustomer = new \Picqer\Financials\Exact\Account($connection);
+            if (array_key_exists('customer',$order))
             {
-                // If authorization code is returned from Exact, save this to use for token request
-                if (isset($_GET['code']) && is_null(getValue('authorizationcode'))) {
-                    setValue('authorizationcode', $_GET['code']);
-                }
-                // If we do not have a authorization code, authorize first to setup tokens
-                if (getValue('authorizationcode') === null) {
-                    authorizer();
-                }     
-                // For Customer
-                $connection = connecter();
-                // $url = 'crm/Accounts';
-                $exactCustomer = new \Picqer\Financials\Exact\Account($connection);
-                if (array_key_exists('customer',$order))
+                if (NULL !== $order['customer'])
                 {
-                    if (NULL !== $order['customer'])
+                    $exactCustomerId = $exactCustomer->findId($order['customer']['last_name'], $key='Name');
+                    $exactCustomer->Name = $order['customer']['last_name'];
+                }
+            } else 
+            {
+                $exactCustomerId = null;
+                $exactCustomer->Name = "default";
+            }                 
+            if (empty($exactCustomerId))
+            {
+                $shopCustomer = $shopify->Customer->get();
+                $exactCustomer->IsSales = 'true';
+                $exactCustomer->Status = 'C';
+                // field in shopify to use it for VAT number
+                $exactCustomer->VATNumber = $shopCustomer[0]['note'];
+                $exactCustomer->AddressLine1 = $shopCustomer[0]['addresses'][0]['address1'];
+                $exactCustomer->AddressLine2 = $shopCustomer[0]['addresses'][0]['address2'];
+                $exactCustomer->City = $shopCustomer[0]['addresses'][0]['city'];
+                $exactCustomer->CountryName = $shopCustomer[0]['addresses'][0]['country'];
+                $exactCustomer->Postcode = $shopCustomer[0]['addresses'][0]['zip'];
+                $exactCustomer->save();
+                $CustomerId = $exactCustomer->ID;
+                $customerCode = 0 + $exactCustomer->Code;
+            } else
+            {                
+                $shopCustomer = $shopify->Customer->get();
+                $CustomerId = $exactCustomer->find($exactCustomerId)->ID;
+                $customerFind = $exactCustomer->find($exactCustomerId);
+                $customerFind->IsSales = 'true';
+                $customerFind->Status = 'C';
+
+                // field in shopify to use it for VAT number
+                $customerFind->VATNumber = $shopCustomer[0]['note'];
+                $customerFind->AddressLine1 = $shopCustomer[0]['addresses'][0]['address1'];
+                $customerFind->AddressLine2 = $shopCustomer[0]['addresses'][0]['address2'];
+                $customerFind->City = $shopCustomer[0]['addresses'][0]['city'];
+                $customerFind->CountryName = $shopCustomer[0]['addresses'][0]['country'];
+                $customerFind->Postcode = $shopCustomer[0]['addresses'][0]['zip'];
+                $customerFind->update();
+                $customerCode = 0 + $customerFind->Code;
+            }
+            // For SalesOrder
+            // Create the Exact client
+            $connection = connecter();
+            // $url = 'salesorder/SalesOrders';
+            $exactSalesOrder = new \Picqer\Financials\Exact\SalesOrder($connection);
+            $exactSalesOrder->OrderedBy=$CustomerId;                                       
+            $exactSalesOrder->OrderNumber=(int)($order['order_number']. $customerCode);                
+            $exactSalesOrder->Created = $order['created_at'];
+            $exactSalesOrder->Currency = $order['currency'];                    
+            if (!empty($order['discount_applications']) && array_key_exists('value', $order['discount_applications'][0]))
+            {
+                if ($order['discount_applications'][0]['value_type'] == 'percentage' )
+                {
+                    $exactSalesOrder->Discount = $order['discount_applications'][0]['value'] / 100;
+                } else if ($order['discount_applications'][0]['value_type'] == 'fixed_amount' )
+                {
+                    $exactSalesOrder->Discount = ($order['total_discounts']) / $order['total_line_items_price'];
+                }                        
+            }
+            $soLines = array();
+            foreach ($order['line_items'] as $item)
+            {
+                if (isset($item['tax_lines'][0]))
+                {
+                    $vatAmount = $item['tax_lines'][0]['price'];
+                    $vatCode = 5;
+                    $vatPercentage = $item['tax_lines'][0]['rate'];
+                    if ($vatPercentage == 0.21)
                     {
-                        $exactCustomerId = $exactCustomer->findId($order['customer']['last_name'], $key='Name');
-                        $exactCustomer->Name = $order['customer']['last_name'];
+                        $vatCode = 5;
+                    } else if ($vatPercentage == 0.20)
+                    {
+                        $vatCode = 'VN';
                     }
                 } else 
                 {
-                    $exactCustomerId = null;
-                    $exactCustomer->Name = "default";
-                }                 
-                
-                if (empty($exactCustomerId))
-                {
-                    $shopCustomer = $shopify->Customer->get();
-                    $exactCustomer->IsSales = 'true';
-                    $exactCustomer->Status = 'C';
-                    // field in shopify to use it for VAT number
-                    $exactCustomer->VATNumber = $shopCustomer[0]['note'];
-                    $exactCustomer->AddressLine1 = $shopCustomer[0]['addresses'][0]['address1'];
-                    $exactCustomer->AddressLine2 = $shopCustomer[0]['addresses'][0]['address2'];
-                    $exactCustomer->City = $shopCustomer[0]['addresses'][0]['city'];
-                    $exactCustomer->CountryName = $shopCustomer[0]['addresses'][0]['country'];
-                    $exactCustomer->Postcode = $shopCustomer[0]['addresses'][0]['zip'];
-                    $exactCustomer->save();
-                    $CustomerId = $exactCustomer->ID;
-                } else
-                {                
-                    $shopCustomer = $shopify->Customer->get();
-
-                    $CustomerId = $exactCustomer->find($exactCustomerId)->ID;
-                    $customerFind = $exactCustomer->find($exactCustomerId);
-                    $customerFind->IsSales = 'true';
-                    $customerFind->Status = 'C';
-
-                    // field in shopify to use it for VAT number
-                    $customerFind->VATNumber = $shopCustomer[0]['note'];
-                    $customerFind->AddressLine1 = $shopCustomer[0]['addresses'][0]['address1'];
-                    $customerFind->AddressLine2 = $shopCustomer[0]['addresses'][0]['address2'];
-                    $customerFind->City = $shopCustomer[0]['addresses'][0]['city'];
-                    $customerFind->CountryName = $shopCustomer[0]['addresses'][0]['country'];
-                    $customerFind->Postcode = $shopCustomer[0]['addresses'][0]['zip'];
-                    $customerFind->update();
+                    $vatAmount = 0;
+                    $vatCode = 0;
+                    $vatPercentage = 0;
                 }
-                // For SalesOrder
+                // For Item
                 // Create the Exact client
                 $connection = connecter();
-                // $url = 'salesorder/SalesOrders';
-                $exactSalesOrder = new \Picqer\Financials\Exact\SalesOrder($connection);
-                $exactSalesOrder->OrderedBy=$CustomerId;
-                $exactSalesOrder->OrderNumber=(int)($order['order_number'].'560');
-                $exactSalesOrder->Created = $order['created_at'];
-                $exactSalesOrder->Currency = $order['currency'];                    
-                if (!empty($order['discount_applications']) && array_key_exists('value', $order['discount_applications'][0]))
-                {
-                    if ($order['discount_applications'][0]['value_type'] == 'percentage' )
-                    {
-                        $exactSalesOrder->Discount = $order['discount_applications'][0]['value'] / 100;
-                    } else if ($order['discount_applications'][0]['value_type'] == 'fixed_amount' )
-                    {
-                        $exactSalesOrder->Discount = ($order['total_discounts']) / $order['total_line_items_price'];
-                    }                        
-                }
-                $soLines = array();
-                foreach ($order['line_items'] as $item)
-                {
-                    // For Item
-                    // Create the Exact client
-                    $connection = connecter();
-                    // $url = 'logistics/Items';
-                    $exactItem = new \Picqer\Financials\Exact\Item($connection);
-                    $exactItemId = $exactItem->findId($item['sku'], $key='Code');
-                    $soLines[] = array(
-                        'Item' => $exactItemId,
-                        'Description' => $item['sku'],
-                        'Quantity' => $item['quantity'],
-                        'NetPrice' => $item['price'],
-                        'VATAmount' => $item['tax_lines'][0]['price'],
-                        'VATCode' => 5,
-                        'VATPercentage' => $item['tax_lines'][0]['rate'],
-                    );
-                }
-                $exactSalesOrder->SalesOrderLines = $soLines;
-                $exactSalesOrder->save();                           
-            } // foreach orders             
-        }  
+                // $url = 'logistics/Items';
+                $exactItem = new \Picqer\Financials\Exact\Item($connection);
+                $exactItemId = $exactItem->findId($item['sku'], $key='Code');
+                $soLines[] = array(
+                    'Item' => $exactItemId,
+                    'Description' => $item['sku'],
+                    'Quantity' => $item['quantity'],
+                    'NetPrice' => $item['price'],
+                    'VATAmount' => $vatAmount,
+                    'VATCode' => $vatCode,
+                    'VATPercentage' => $vatPercentage,
+                );
+            }
+            $exactSalesOrder->SalesOrderLines = $soLines;
+            $exactSalesOrder->save();                        
+        }
         return redirect()->back()->with('success', 'Orders and Customers Synchronised!');            
     }    
     
@@ -761,7 +804,6 @@ class ShopifyController extends Controller
         $connection = connecter();
         // $url = 'crm/Accounts';
         $exactCustomer = new \Picqer\Financials\Exact\Account($connection);
-        //
         if (array_key_exists('customer',$data))        
         {
             if (NULL !== $data['customer'])
@@ -781,6 +823,7 @@ class ShopifyController extends Controller
                     $exactCustomer->Postcode = $data['customer']['default_address']['zip'];
                     $exactCustomer->save();
                     $CustomerId = $exactCustomer->ID;
+                    $customerCode = 0 + $exactCustomer->Code;
                 } else
                 {                             
                     $CustomerId = $exactCustomer->find($exactCustomerId)->ID;
@@ -796,6 +839,7 @@ class ShopifyController extends Controller
                     $customerFind->CountryName = $data['customer']['default_address']['country'];
                     $customerFind->Postcode = $data['customer']['default_address']['zip'];
                     $customerFind->update();
+                    $customerCode = 0 + $exactCustomer->Code;
                 }
             }
         } else 
@@ -813,7 +857,7 @@ class ShopifyController extends Controller
         // $url = 'salesorder/SalesOrders';
         $exactSalesOrder = new \Picqer\Financials\Exact\SalesOrder($connection);
         $exactSalesOrder->OrderedBy=$CustomerId;
-        $exactSalesOrder->OrderNumber=(int)($data['order_number'].'550');
+        $exactSalesOrder->OrderNumber=(int)($data['order_number']. $customerCode);        
         $exactSalesOrder->Created = $data['created_at'];
         $exactSalesOrder->Currency = $data['currency'];
         if (!empty($data['discount_applications']) && array_key_exists('value', $data['discount_applications'][0]))
@@ -829,6 +873,24 @@ class ShopifyController extends Controller
         $soLines = array();
         foreach ($data['line_items'] as $item)
         {
+            if (isset($item['tax_lines'][0]))
+            {
+                $vatAmount = $item['tax_lines'][0]['price'];
+                $vatCode = 5;
+                $vatPercentage = $item['tax_lines'][0]['rate'];
+                if ($vatPercentage == 0.21)
+                {
+                    $vatCode = 5;
+                } else if ($vatPercentage == 0.20)
+                {
+                    $vatCode = 'VN';
+                }
+            } else 
+            {
+                $vatAmount = 0;
+                $vatCode = 0;
+                $vatPercentage = 0;
+            }
             // For Item
             // Create the Exact client
             $connection = connecter();
@@ -840,10 +902,10 @@ class ShopifyController extends Controller
                 'Description' => $item['sku'],
                 'Quantity' => $item['quantity'],
                 'NetPrice' => $item['price'],
-                'VATAmount' => $item['tax_lines'][0]['price'],
-                'VATCode' => 5,
-                'VATPercentage' => $item['tax_lines'][0]['rate'],
-            );    
+                'VATAmount' => $vatAmount,
+                'VATCode' => $vatCode,
+                'VATPercentage' => $vatPercentage,
+            );  
         }
         $exactSalesOrder->SalesOrderLines = $soLines;
         $exactSalesOrder->save();      
@@ -935,8 +997,7 @@ class ShopifyController extends Controller
             $subscription = new \Picqer\Financials\Exact\WebhookSubscription($connection);
             $subscriptionId = $subscription->findId($topic, $key='Topic');
             if (NULL !== $subscriptionId)
-            {                
-                //$subscription->deleteSubscriptions();
+            {              
                 $subscriptionResult = $subscription->find($subscriptionId);
                 $subscriptionResult->CallbackURL = env('WEBHOOKEXACTCALLBACK_URL');
                 $subscriptionResult->Topic = $topic;
@@ -946,8 +1007,7 @@ class ShopifyController extends Controller
                 $subscription->CallbackURL = env('WEBHOOKEXACTCALLBACK_URL');
                 $subscription->Topic = $topic;
                 $subscription->save();
-            }
-            
+            }            
         }
         return view('exact.exactWebhook')->with('connection', $connection)->with('success', 'Webhooks subscribe');        
     }

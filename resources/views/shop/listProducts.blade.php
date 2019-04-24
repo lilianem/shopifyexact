@@ -70,25 +70,29 @@
       <div class="table-responsive">      
         <table class="table table-striped">
           <thead>
-            <tr>
-              <th>Product Id</th>
-              <th>Product #</th>
-              <th>Quantity</th>
-              <th>Store Id</th>
-              <th>Store Name</th>  
-            </tr>
-          </thead>           
-          @foreach($products as $product)                            
-            <tbody>
+            @if (!empty($productTestEmpty))
               <tr>
-                <td>{{$product->id}}</td>                                                      
-                <td>{{$product->provproductid}}</td>
-                <td>{{$product->quantity}}</td>                                             
-                <td>{{$product->store_id}}</td>                  
-                <td>{{$product->store->name}}</td>                                                                   
+                <th>Product Id</th>
+                <th>Product #</th>
+                <th>Quantity</th>
+                <th>Store Id</th>
+                <th>Store Name</th>  
               </tr>
-            </tbody>              
-          @endforeach
+          </thead>           
+              @foreach($products as $product)                            
+                <tbody>
+                  <tr>
+                    <td>{{$product->id}}</td>                                                      
+                    <td>{{$product->provproductid}}</td>
+                    <td>{{$product->quantity}}</td>                                             
+                    <td>{{$product->store_id}}</td>                  
+                    <td>{{$product->store->name}}</td>                                                                   
+                  </tr>
+                </tbody>              
+              @endforeach
+            @else
+              <p>No Products Available</p>
+            @endif
         </table>
       </div>
     </div>

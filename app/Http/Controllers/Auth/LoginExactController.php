@@ -75,8 +75,8 @@ class LoginExactController extends Controller
         $connection = connecter();        
         $products = new \Picqer\Financials\Exact\AccountItem($connection);
         $results = $connection->get($products->url() . "?accountId=guid'00000000-0000-0000-0000-000000000000'");        
-        $resultsCollect = collect($results);       
-        return view('exact.skusList')->with('resultsCollect', $resultsCollect);            
+        $resultsCollect = collect($results)->simple_paginate(5);     
+        return view('exact.skusList')->with('resultsCollect', $resultsCollect)->with('results', $results);             
     }
 
     public function editExactSku(Connection $connection, $id)
@@ -129,9 +129,7 @@ class LoginExactController extends Controller
         $exactStockCount = new \Picqer\Financials\Exact\StockCount($connection);
         //$exactStockCount->StockCountDate = '2019-03-25T12:00';
         $exactStockCount->StockCountDate = date('c');
-        //dd($exactStockCount->StockCountDate);
-        $exactStockCount->Status = 21;
-        //dd(gettype(new \DateTime('2019-03-25')));
+        $exactStockCount->Status = 21;        
         $exactStockCount->Warehouse = $exactWarehouse->first()->ID;
         $exactStockCountLine = array();        
         $exactStockCountLine[] = array(

@@ -14,9 +14,11 @@ function updateSkuFunction($result, $productdetail, $id, $sku)
     else
     {
         $stock = $result['Stock'];
-    }    
-    $sku->totsku->quantitysku = $result['Stock'];    
-    $sku->totsku->save();    
+    }
+    
+    $totsku = App\Models\Totsku::where('numbertotskus', $result['Code'])->first();
+    $totsku->quantitysku = $result['Stock'];    
+    $totsku->save();    
     $sku->designation->designationname = $result['Description'];
     $sku->designation->description = $productdetail->ExtraDescription;    
     $sku->designation->save(); 

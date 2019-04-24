@@ -66,7 +66,7 @@
     <div class="card-body">
       <div class="table-responsive">      
           <table class="table table-striped">
-            @if (!empty($resultsCollect))
+            @if (!empty($results))
             <thead>            
               <tr>
                 <th>Product Id</th>
@@ -96,7 +96,7 @@
       </div>
     </div> 
   </div>
-  {{ $resultsCollect->link_function() }}
+  {{ $resultsCollect->links() }}
   <a href="{{ URL::to('/exact/sync/sku') }}"><button type="button" class="btn btn-primary btn-sm">Sync Exact->Shopify Skus</button></a>       
 </div>
 @endsection
